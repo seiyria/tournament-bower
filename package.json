@@ -1,6 +1,6 @@
 {
   "name": "tournament-bower",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "@clux/tournament available via bower.",
   "main": "index.js",
   "scripts": {
