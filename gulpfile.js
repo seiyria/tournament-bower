@@ -12,10 +12,11 @@ gulp.task('build-all', function() {
     // long hair, don't care
     console.log('./uncompressed exists');
   }
-  execSync('browserify -r duel > uncompressed/duel.js');
-  execSync('browserify -r ffa > uncompressed/ffa.js');
-  execSync('browserify -r groupstage > uncompressed/groupstage.js');
-  execSync('browserify -r tiebreaker > uncompressed/tiebreaker.js');
+  execSync('browserify --standalone Duel -r duel > uncompressed/duel.js');
+  execSync('browserify --standalone FFA -r ffa > uncompressed/ffa.js');
+  execSync('browserify --standalone GroupStage -r groupstage > uncompressed/groupstage.js');
+  execSync('browserify --standalone Tiebreaker -r tiebreaker > uncompressed/tiebreaker.js');
+  execSync('browserify --standalone Tournament -r duel -r ffa -r groupstage -r tiebreaker > uncompressed/all.js');
 });
 
 gulp.task('uglify-all', ['build-all'], function() {
