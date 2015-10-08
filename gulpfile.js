@@ -13,6 +13,7 @@ gulp.task('build-all', function() {
     console.log('./uncompressed exists');
   }
   execSync('browserify --standalone Duel -r duel > uncompressed/duel.js');
+  execSync('browserify --standalone Masters -r masters > uncompressed/masters.js');
   execSync('browserify --standalone FFA -r ffa > uncompressed/ffa.js');
   execSync('browserify --standalone GroupStage -r groupstage > uncompressed/groupstage.js');
   execSync('browserify --standalone Tiebreaker -r tiebreaker > uncompressed/tiebreaker.js');

@@ -24,6 +24,7 @@
     "duel": "^3.0.1",
     "ffa": "^3.0.0",
     "groupstage": "^3.0.0",
+    "masters": "^3.0.0",
     "tiebreaker": "^3.0.0"
   },
   "devDependencies": {
