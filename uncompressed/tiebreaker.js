@@ -1,277 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Tiebreaker = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var $ = require('interlude')
-  , Tournament = require('tournament')
-  , robin = require('roundrobin')
-  , grouper = require('group');
-
-function Id(g, r, m) {
-  if (!(this instanceof Id)) {
-    return new Id(g, r, m);
-  }
-  this.s = g;
-  this.r = r;
-  this.m = m;
-}
-
-Id.prototype.toString = function () {
-  return "G" + this.s + " R" + this.r + " M" + this.m;
-};
-
-var mapOdd = function (n) {
-  return n*2 - 1;
-};
-var mapEven = function (n) {
-  return n*2;
-};
-
-var makeMatches = function (numPlayers, groupSize, hasAway) {
-  var groups = grouper(numPlayers, groupSize);
-  var matches = [];
-  for (var g = 0; g < groups.length; g += 1) {
-    var group = groups[g];
-    // make robin rounds for the group
-    var rnds = robin(group.length, group);
-    for (var r = 0; r < rnds.length; r += 1) {
-      var rnd = rnds[r];
-      for (var m = 0; m < rnd.length; m += 1) {
-        var plsH = rnd[m];
-        if (!hasAway) { // players only meet once
-          matches.push({ id: new Id(g+1, r+1, m+1), p : plsH });
-        }
-        else { // players meet twice
-          var plsA = plsH.slice().reverse();
-          matches.push({ id: new Id(g+1, mapOdd(r+1), m+1), p: plsH });
-          matches.push({ id: new Id(g+1, mapEven(r+1), m+1), p: plsA });
-        }
-      }
-    }
-  }
-  return matches.sort(Tournament.compareMatches);
-};
-
-var GroupStage = Tournament.sub('GroupStage', function (opts, initParent) {
-  var ms = makeMatches(this.numPlayers, opts.groupSize, opts.meetTwice);
-  this.numGroups = $.maximum(ms.map($.get('id', 's')));
-  this.groupSize = Math.ceil(this.numPlayers / this.numGroups); // perhaps reduced
-  this.winPoints = opts.winPoints;
-  this.tiePoints = opts.tiePoints;
-  this.scoresBreak = opts.scoresBreak;
-  initParent(ms);
-});
-
-GroupStage.configure({
-  defaults: function (np, o) {
-    // no group size set => league
-    o.groupSize = Number(o.groupSize) || np;
-    o.meetTwice = Boolean(o.meetTwice);
-    o.winPoints = Number.isFinite(o.winPoints) ? o.winPoints : 3;
-    o.tiePoints = Number.isFinite(o.tiePoints) ? o.tiePoints : 1;
-    o.scoresBreak = Boolean(o.scoresBreak);
-    return o;
-  },
-
-  invalid: function (np, opts) {
-    if (np < 2) {
-      return "numPlayers cannot be less than 2";
-    }
-    if (opts.groupSize < 2) {
-      return "groupSize cannot be less than 2";
-    }
-    if (opts.groupSize > np) {
-      return "groupSize cannot be greater than numPlayers";
-    }
-    return null;
-  }
-});
-
-// helper
-GroupStage.prototype.groupFor = function (playerId) {
-  for (var i = 0; i < this.matches.length; i += 1) {
-    var m = this.matches[i];
-    if (m.p.indexOf(playerId) >= 0) {
-      return m.id.s;
-    }
-  }
-};
-
-// no one-round-at-a-time restrictions so can always recore
-GroupStage.prototype._safe = $.constant(true);
-
-GroupStage.prototype._initResult = function (seed) {
-  return {
-    grp: this.groupFor(seed),
-    gpos: this.groupSize,
-    pts: 0,
-    draws: 0,
-    losses: 0
-  };
-};
-
-GroupStage.prototype._stats = function (res, m) {
-  if (!m.m) {
-    return res;
-  }
-  var p0 = Tournament.resultEntry(res, m.p[0]);
-  var p1 = Tournament.resultEntry(res, m.p[1]);
-
-  if (m.m[0] === m.m[1]) {
-    p0.pts += this.tiePoints;
-    p1.pts += this.tiePoints;
-    p0.draws += 1;
-    p1.draws += 1;
-  }
-  else {
-    var w = (m.m[0] > m.m[1]) ? p0 : p1;
-    var l = (m.m[0] > m.m[1]) ? p1 : p0;
-    w.wins += 1;
-    w.pts += this.winPoints;
-    l.losses += 1;
-  }
-  p0.for += m.m[0];
-  p1.for += m.m[1];
-  p0.against += m.m[1];
-  p1.against += m.m[0];
-  return res;
-};
-
-var resultsByGroup = function (results, numGroups) {
-  var grps = $.replicate(numGroups, []);
-  for (var k = 0; k < results.length; k += 1) {
-    var p = results[k];
-    grps[p.grp - 1].push(p);
-  }
-  return grps;
-};
-
-var tieCompute = function (resAry, startPos, scoresBreak, cb) {
-  // provide the metric for resTieCompute which look factors: points and score diff
-  Tournament.resTieCompute(resAry, startPos, cb, function metric(r) {
-    var val = "PTS" + r.pts;
-    if (scoresBreak) {
-      val += "DIFF" + (r.for - r.against);
-    }
-    return val;
-  });
-};
-
-var compareResults = function (x, y) {
-  var xScore = x.for - x.against;
-  var yScore = y.for - y.against;
-  return (y.pts - x.pts) || (yScore - xScore) || (x.seed - y.seed);
-};
-
-var finalCompare = function (x, y) {
-  return (x.pos - y.pos) ||  compareResults(x, y);
-};
-
-GroupStage.prototype._sort = function (res) {
-  var scoresBreak = this.scoresBreak;
-  res.sort(compareResults);
-
-  // tieCompute within groups to get the `gpos` attribute
-  // at the same time build up array of xplacers
-  var xarys = $.replicate(this.groupSize, []);
-  resultsByGroup(res, this.numGroups).forEach(function (g) { // g sorted as res is
-    tieCompute(g, 0, scoresBreak, function (r, pos) {
-      r.gpos = pos;
-      xarys[pos-1].push(r);
-    });
-  });
-
-  if (this.isDone()) {
-    // position based entirely on x-placement (ignore pts/scorediff across grps)
-    var posctr = 1;
-    xarys.forEach(function (xplacers) {
-      xplacers.forEach(function (r) {
-        r.pos = posctr;
-      });
-      posctr += xplacers.length;
-    });
-  }
-  return res.sort(finalCompare); // ensure sorted by pos primarily
-};
-
-// helper method to be compatible with TieBreaker
-GroupStage.prototype.rawPositions = function (res) {
-  return resultsByGroup(res, this.numGroups).map(function (grp) {
-    // NB: need to create the empty arrays to let result function as a lookup
-    var seedAry = $.replicate(grp.length, []);
-    for (var k = 0; k < grp.length; k += 1) {
-      var p = grp[k];
-      $.insert(seedAry[p.gpos-1], p.seed); // insert ensures ascending order
-    }
-    return seedAry;
-  });
-};
-
-GroupStage.id = Id; // mostly for tests
-
-module.exports = GroupStage;
-
-},{"group":2,"interlude":3,"roundrobin":7,"tournament":9}],2:[function(require,module,exports){
-var group = function (numPlayers, groupSize) {
-  var numGroups = Math.ceil(numPlayers / groupSize);
-  groupSize = group.minimalGroupSize(numPlayers, groupSize, numGroups);
-  var model = numGroups * groupSize;
-
-  var groupList = [];
-  for (var k = 0; k < numGroups; k += 1) {
-    groupList[k] = [];
-  }
-
-  // iterations required to fill groups
-  for (var j = 0; j < Math.ceil(groupSize / 2); j += 1) {
-    // fill each group with pairs that sum to model + 1
-    // until you are in the last iteration (in which may only want one of them)
-    for (var g = 0; g < numGroups; g += 1) {
-      var a = j*numGroups + g + 1;
-
-      groupList[g].push(a);
-      if (groupList[g].length < groupSize) {
-        groupList[g].push(model + 1 - a);
-      }
-    }
-  }
-
-  // remove non-present players and sort by seeding number
-  return groupList.map(function (g) {
-    return g.sort(function (x, y) {
-      return x - y;
-    }).filter(function (p) {
-      return p <= numPlayers;
-    });
-  });
-};
-
-group.minimalGroupSize = function (numPlayers, groupSize) {
-  var numGroups = arguments[2] || Math.ceil(numPlayers / groupSize);
-  while (numGroups * groupSize - numPlayers >= numGroups) {
-    groupSize -= 1; // while all groups have 1 free slot
-  }
-  return groupSize;
-};
-
-module.exports = group;
-
-},{}],3:[function(require,module,exports){
-var $ = require('autonomy');
-
-module.exports = function () {
-  var fns = arguments;
-  return function () {
-    var res = fns[0].apply(this, arguments);
-    for (var i = 1, len = fns.length; i < len; i += 1) {
-      res = fns[i](res);
-    }
-    return res;
-  };
-};
-
-$.extend(module.exports, $);
-$.extend(module.exports, require('operators'));
-$.extend(module.exports, require('subset'));
-
-},{"autonomy":4,"operators":5,"subset":6}],4:[function(require,module,exports){
 var slice = Array.prototype.slice;
 
 // ---------------------------------------------
@@ -540,7 +267,280 @@ $.invoke = function (method) {
 // end - export
 module.exports = $;
 
-},{}],5:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
+var group = function (numPlayers, groupSize) {
+  var numGroups = Math.ceil(numPlayers / groupSize);
+  groupSize = group.minimalGroupSize(numPlayers, groupSize, numGroups);
+  var model = numGroups * groupSize;
+
+  var groupList = [];
+  for (var k = 0; k < numGroups; k += 1) {
+    groupList[k] = [];
+  }
+
+  // iterations required to fill groups
+  for (var j = 0; j < Math.ceil(groupSize / 2); j += 1) {
+    // fill each group with pairs that sum to model + 1
+    // until you are in the last iteration (in which may only want one of them)
+    for (var g = 0; g < numGroups; g += 1) {
+      var a = j*numGroups + g + 1;
+
+      groupList[g].push(a);
+      if (groupList[g].length < groupSize) {
+        groupList[g].push(model + 1 - a);
+      }
+    }
+  }
+
+  // remove non-present players and sort by seeding number
+  return groupList.map(function (g) {
+    return g.sort(function (x, y) {
+      return x - y;
+    }).filter(function (p) {
+      return p <= numPlayers;
+    });
+  });
+};
+
+group.minimalGroupSize = function (numPlayers, groupSize) {
+  var numGroups = arguments[2] || Math.ceil(numPlayers / groupSize);
+  while (numGroups * groupSize - numPlayers >= numGroups) {
+    groupSize -= 1; // while all groups have 1 free slot
+  }
+  return groupSize;
+};
+
+module.exports = group;
+
+},{}],3:[function(require,module,exports){
+var $ = require('interlude')
+  , Tournament = require('tournament')
+  , robin = require('roundrobin')
+  , grouper = require('group');
+
+function Id(g, r, m) {
+  if (!(this instanceof Id)) {
+    return new Id(g, r, m);
+  }
+  this.s = g;
+  this.r = r;
+  this.m = m;
+}
+
+Id.prototype.toString = function () {
+  return "G" + this.s + " R" + this.r + " M" + this.m;
+};
+
+var mapOdd = function (n) {
+  return n*2 - 1;
+};
+var mapEven = function (n) {
+  return n*2;
+};
+
+var makeMatches = function (numPlayers, groupSize, hasAway) {
+  var groups = grouper(numPlayers, groupSize);
+  var matches = [];
+  for (var g = 0; g < groups.length; g += 1) {
+    var group = groups[g];
+    // make robin rounds for the group
+    var rnds = robin(group.length, group);
+    for (var r = 0; r < rnds.length; r += 1) {
+      var rnd = rnds[r];
+      for (var m = 0; m < rnd.length; m += 1) {
+        var plsH = rnd[m];
+        if (!hasAway) { // players only meet once
+          matches.push({ id: new Id(g+1, r+1, m+1), p : plsH });
+        }
+        else { // players meet twice
+          var plsA = plsH.slice().reverse();
+          matches.push({ id: new Id(g+1, mapOdd(r+1), m+1), p: plsH });
+          matches.push({ id: new Id(g+1, mapEven(r+1), m+1), p: plsA });
+        }
+      }
+    }
+  }
+  return matches.sort(Tournament.compareMatches);
+};
+
+var GroupStage = Tournament.sub('GroupStage', function (opts, initParent) {
+  var ms = makeMatches(this.numPlayers, opts.groupSize, opts.meetTwice);
+  this.numGroups = $.maximum(ms.map($.get('id', 's')));
+  this.groupSize = Math.ceil(this.numPlayers / this.numGroups); // perhaps reduced
+  this.winPoints = opts.winPoints;
+  this.tiePoints = opts.tiePoints;
+  this.scoresBreak = opts.scoresBreak;
+  initParent(ms);
+});
+
+GroupStage.configure({
+  defaults: function (np, o) {
+    // no group size set => league
+    o.groupSize = Number(o.groupSize) || np;
+    o.meetTwice = Boolean(o.meetTwice);
+    o.winPoints = Number.isFinite(o.winPoints) ? o.winPoints : 3;
+    o.tiePoints = Number.isFinite(o.tiePoints) ? o.tiePoints : 1;
+    o.scoresBreak = Boolean(o.scoresBreak);
+    return o;
+  },
+
+  invalid: function (np, opts) {
+    if (np < 2) {
+      return "numPlayers cannot be less than 2";
+    }
+    if (opts.groupSize < 2) {
+      return "groupSize cannot be less than 2";
+    }
+    if (opts.groupSize > np) {
+      return "groupSize cannot be greater than numPlayers";
+    }
+    return null;
+  }
+});
+
+// helper
+GroupStage.prototype.groupFor = function (playerId) {
+  for (var i = 0; i < this.matches.length; i += 1) {
+    var m = this.matches[i];
+    if (m.p.indexOf(playerId) >= 0) {
+      return m.id.s;
+    }
+  }
+};
+
+// no one-round-at-a-time restrictions so can always recore
+GroupStage.prototype._safe = $.constant(true);
+
+GroupStage.prototype._initResult = function (seed) {
+  return {
+    grp: this.groupFor(seed),
+    gpos: this.groupSize,
+    pts: 0,
+    draws: 0,
+    losses: 0
+  };
+};
+
+GroupStage.prototype._stats = function (res, m) {
+  if (!m.m) {
+    return res;
+  }
+  var p0 = Tournament.resultEntry(res, m.p[0]);
+  var p1 = Tournament.resultEntry(res, m.p[1]);
+
+  if (m.m[0] === m.m[1]) {
+    p0.pts += this.tiePoints;
+    p1.pts += this.tiePoints;
+    p0.draws += 1;
+    p1.draws += 1;
+  }
+  else {
+    var w = (m.m[0] > m.m[1]) ? p0 : p1;
+    var l = (m.m[0] > m.m[1]) ? p1 : p0;
+    w.wins += 1;
+    w.pts += this.winPoints;
+    l.losses += 1;
+  }
+  p0.for += m.m[0];
+  p1.for += m.m[1];
+  p0.against += m.m[1];
+  p1.against += m.m[0];
+  return res;
+};
+
+var resultsByGroup = function (results, numGroups) {
+  var grps = $.replicate(numGroups, []);
+  for (var k = 0; k < results.length; k += 1) {
+    var p = results[k];
+    grps[p.grp - 1].push(p);
+  }
+  return grps;
+};
+
+var tieCompute = function (resAry, startPos, scoresBreak, cb) {
+  // provide the metric for resTieCompute which look factors: points and score diff
+  Tournament.resTieCompute(resAry, startPos, cb, function metric(r) {
+    var val = "PTS" + r.pts;
+    if (scoresBreak) {
+      val += "DIFF" + (r.for - r.against);
+    }
+    return val;
+  });
+};
+
+var compareResults = function (x, y) {
+  var xScore = x.for - x.against;
+  var yScore = y.for - y.against;
+  return (y.pts - x.pts) || (yScore - xScore) || (x.seed - y.seed);
+};
+
+var finalCompare = function (x, y) {
+  return (x.pos - y.pos) ||  compareResults(x, y);
+};
+
+GroupStage.prototype._sort = function (res) {
+  var scoresBreak = this.scoresBreak;
+  res.sort(compareResults);
+
+  // tieCompute within groups to get the `gpos` attribute
+  // at the same time build up array of xplacers
+  var xarys = $.replicate(this.groupSize, []);
+  resultsByGroup(res, this.numGroups).forEach(function (g) { // g sorted as res is
+    tieCompute(g, 0, scoresBreak, function (r, pos) {
+      r.gpos = pos;
+      xarys[pos-1].push(r);
+    });
+  });
+
+  if (this.isDone()) {
+    // position based entirely on x-placement (ignore pts/scorediff across grps)
+    var posctr = 1;
+    xarys.forEach(function (xplacers) {
+      xplacers.forEach(function (r) {
+        r.pos = posctr;
+      });
+      posctr += xplacers.length;
+    });
+  }
+  return res.sort(finalCompare); // ensure sorted by pos primarily
+};
+
+// helper method to be compatible with TieBreaker
+GroupStage.prototype.rawPositions = function (res) {
+  return resultsByGroup(res, this.numGroups).map(function (grp) {
+    // NB: need to create the empty arrays to let result function as a lookup
+    var seedAry = $.replicate(grp.length, []);
+    for (var k = 0; k < grp.length; k += 1) {
+      var p = grp[k];
+      $.insert(seedAry[p.gpos-1], p.seed); // insert ensures ascending order
+    }
+    return seedAry;
+  });
+};
+
+GroupStage.id = Id; // mostly for tests
+
+module.exports = GroupStage;
+
+},{"group":2,"interlude":4,"roundrobin":6,"tournament":9}],4:[function(require,module,exports){
+var $ = require('autonomy');
+
+module.exports = function () {
+  var fns = arguments;
+  return function () {
+    var res = fns[0].apply(this, arguments);
+    for (var i = 1, len = fns.length; i < len; i += 1) {
+      res = fns[i](res);
+    }
+    return res;
+  };
+};
+
+$.extend(module.exports, $);
+$.extend(module.exports, require('operators'));
+$.extend(module.exports, require('subset'));
+
+},{"autonomy":1,"operators":5,"subset":7}],5:[function(require,module,exports){
 var $ = {}
   , concat = Array.prototype.concat;
 
@@ -807,6 +807,37 @@ $.lte = function (y) {
 module.exports = $;
 
 },{}],6:[function(require,module,exports){
+const DUMMY = -1;
+// returns an array of round representations (array of player pairs).
+// http://en.wikipedia.org/wiki/Round-robin_tournament#Scheduling_algorithm
+module.exports = function (n, ps) {  // n = num players
+  var rs = [];                  // rs = round array
+  if (!ps) {
+    ps = [];
+    for (var k = 1; k <= n; k += 1) {
+      ps.push(k);
+    }
+  } else {
+    ps = ps.slice();
+  }
+
+  if (n % 2 === 1) {
+    ps.push(DUMMY); // so we can match algorithm for even numbers
+    n += 1;
+  }
+  for (var j = 0; j < n - 1; j += 1) {
+    rs[j] = []; // create inner match array for round j
+    for (var i = 0; i < n / 2; i += 1) {
+      if (ps[i] !== DUMMY && ps[n - 1 - i] !== DUMMY) {
+        rs[j].push([ps[i], ps[n - 1 - i]]); // insert pair as a match
+      }
+    }
+    ps.splice(1, 0, ps.pop()); // permutate for next round
+  }
+  return rs;
+};
+
+},{}],7:[function(require,module,exports){
 var $ = {};
 
 // ---------------------------------------------
@@ -1025,37 +1056,6 @@ $.isSubsetOf = function (xs, ys, proper) {
 // end - export
 module.exports = $;
 
-},{}],7:[function(require,module,exports){
-const DUMMY = -1;
-// returns an array of round representations (array of player pairs).
-// http://en.wikipedia.org/wiki/Round-robin_tournament#Scheduling_algorithm
-module.exports = function (n, ps) {  // n = num players
-  var rs = [];                  // rs = round array
-  if (!ps) {
-    ps = [];
-    for (var k = 1; k <= n; k += 1) {
-      ps.push(k);
-    }
-  } else {
-    ps = ps.slice();
-  }
-
-  if (n % 2 === 1) {
-    ps.push(DUMMY); // so we can match algorithm for even numbers
-    n += 1;
-  }
-  for (var j = 0; j < n - 1; j += 1) {
-    rs[j] = []; // create inner match array for round j
-    for (var i = 0; i < n / 2; i += 1) {
-      if (ps[i] !== DUMMY && ps[n - 1 - i] !== DUMMY) {
-        rs[j].push([ps[i], ps[n - 1 - i]]); // insert pair as a match
-      }
-    }
-    ps.splice(1, 0, ps.pop()); // permutate for next round
-  }
-  return rs;
-};
-
 },{}],8:[function(require,module,exports){
 var $ = require('interlude');
 
@@ -1141,7 +1141,7 @@ o.playable = function (m) {
 
 module.exports = o;
 
-},{"interlude":3}],9:[function(require,module,exports){
+},{"interlude":4}],9:[function(require,module,exports){
 var $ = require('interlude');
 var helper = require('./match');
 
@@ -1550,19 +1550,7 @@ Tournament.prototype.players = function (id) {
 
 module.exports = Tournament;
 
-},{"./match":8,"interlude":3}],10:[function(require,module,exports){
-arguments[4][3][0].apply(exports,arguments)
-},{"autonomy":11,"dup":3,"operators":12,"subset":13}],11:[function(require,module,exports){
-arguments[4][4][0].apply(exports,arguments)
-},{"dup":4}],12:[function(require,module,exports){
-arguments[4][5][0].apply(exports,arguments)
-},{"dup":5}],13:[function(require,module,exports){
-arguments[4][6][0].apply(exports,arguments)
-},{"dup":6}],14:[function(require,module,exports){
-arguments[4][8][0].apply(exports,arguments)
-},{"dup":8,"interlude":10}],15:[function(require,module,exports){
-arguments[4][9][0].apply(exports,arguments)
-},{"./match":14,"dup":9,"interlude":10}],"tiebreaker":[function(require,module,exports){
+},{"./match":8,"interlude":4}],"tiebreaker":[function(require,module,exports){
 var $ = require('interlude')
   , GroupStage = require('groupstage')
   , Base = require('tournament');
@@ -1924,5 +1912,5 @@ TieBreaker.prototype.rawPositions = function (/*res*/) {
 
 module.exports = TieBreaker;
 
-},{"groupstage":1,"interlude":10,"tournament":15}]},{},[])("tiebreaker")
+},{"groupstage":3,"interlude":4,"tournament":9}]},{},[])("tiebreaker")
 });

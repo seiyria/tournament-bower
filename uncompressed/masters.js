@@ -1,22 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Masters = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var $ = require('autonomy');
-
-module.exports = function () {
-  var fns = arguments;
-  return function () {
-    var res = fns[0].apply(this, arguments);
-    for (var i = 1, len = fns.length; i < len; i += 1) {
-      res = fns[i](res);
-    }
-    return res;
-  };
-};
-
-$.extend(module.exports, $);
-$.extend(module.exports, require('operators'));
-$.extend(module.exports, require('subset'));
-
-},{"autonomy":2,"operators":3,"subset":4}],2:[function(require,module,exports){
 var slice = Array.prototype.slice;
 
 // ---------------------------------------------
@@ -285,7 +267,25 @@ $.invoke = function (method) {
 // end - export
 module.exports = $;
 
-},{}],3:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
+var $ = require('autonomy');
+
+module.exports = function () {
+  var fns = arguments;
+  return function () {
+    var res = fns[0].apply(this, arguments);
+    for (var i = 1, len = fns.length; i < len; i += 1) {
+      res = fns[i](res);
+    }
+    return res;
+  };
+};
+
+$.extend(module.exports, $);
+$.extend(module.exports, require('operators'));
+$.extend(module.exports, require('subset'));
+
+},{"autonomy":1,"operators":3,"subset":4}],3:[function(require,module,exports){
 var $ = {}
   , concat = Array.prototype.concat;
 
@@ -855,7 +855,7 @@ o.playable = function (m) {
 
 module.exports = o;
 
-},{"interlude":1}],6:[function(require,module,exports){
+},{"interlude":2}],6:[function(require,module,exports){
 var $ = require('interlude');
 var helper = require('./match');
 
@@ -1264,7 +1264,7 @@ Tournament.prototype.players = function (id) {
 
 module.exports = Tournament;
 
-},{"./match":5,"interlude":1}],"masters":[function(require,module,exports){
+},{"./match":5,"interlude":2}],"masters":[function(require,module,exports){
 var Base = require('tournament')
   , $ = require('interlude');
 
@@ -1402,5 +1402,5 @@ Masters.prototype._stats = function (res, m) {
 
 module.exports = Masters;
 
-},{"interlude":1,"tournament":6}]},{},[])("masters")
+},{"interlude":2,"tournament":6}]},{},[])("masters")
 });

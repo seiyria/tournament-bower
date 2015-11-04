@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/seiyria/tournament-bower#readme",
   "dependencies": {
-    "duel": "^3.0.1",
+    "duel": "^3.1.1",
     "ffa": "^3.0.0",
     "groupstage": "^3.0.0",
     "masters": "^3.0.0",

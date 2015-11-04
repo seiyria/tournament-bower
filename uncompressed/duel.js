@@ -1,22 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Duel = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var $ = require('autonomy');
-
-module.exports = function () {
-  var fns = arguments;
-  return function () {
-    var res = fns[0].apply(this, arguments);
-    for (var i = 1, len = fns.length; i < len; i += 1) {
-      res = fns[i](res);
-    }
-    return res;
-  };
-};
-
-$.extend(module.exports, $);
-$.extend(module.exports, require('operators'));
-$.extend(module.exports, require('subset'));
-
-},{"autonomy":2,"operators":3,"subset":4}],2:[function(require,module,exports){
 var slice = Array.prototype.slice;
 
 // ---------------------------------------------
@@ -285,7 +267,25 @@ $.invoke = function (method) {
 // end - export
 module.exports = $;
 
-},{}],3:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
+var $ = require('autonomy');
+
+module.exports = function () {
+  var fns = arguments;
+  return function () {
+    var res = fns[0].apply(this, arguments);
+    for (var i = 1, len = fns.length; i < len; i += 1) {
+      res = fns[i](res);
+    }
+    return res;
+  };
+};
+
+$.extend(module.exports, $);
+$.extend(module.exports, require('operators'));
+$.extend(module.exports, require('subset'));
+
+},{"autonomy":1,"operators":3,"subset":4}],3:[function(require,module,exports){
 var $ = {}
   , concat = Array.prototype.concat;
 
@@ -855,7 +855,7 @@ o.playable = function (m) {
 
 module.exports = o;
 
-},{"interlude":1}],6:[function(require,module,exports){
+},{"interlude":2}],6:[function(require,module,exports){
 var $ = require('interlude');
 var helper = require('./match');
 
@@ -1264,7 +1264,7 @@ Tournament.prototype.players = function (id) {
 
 module.exports = Tournament;
 
-},{"./match":5,"interlude":1}],"duel":[function(require,module,exports){
+},{"./match":5,"interlude":2}],"duel":[function(require,module,exports){
 var Base = require('tournament')
   , $ = require('interlude');
 
@@ -1273,18 +1273,18 @@ const WB = 1
     , WO = -1;
 
 // Id class - so each Id has an automatic string representation
-function Id(b, r, m){
-  this.s = b;
-  this.r = r;
-  this.m = m;
+function Id(bracket, round, match) {
+  this.s = bracket;
+  this.r = round;
+  this.m = match;
 }
 Id.prototype.toString = function () {
-  return (this.s === WB ? "WB" : "LB") + " R" + this.r + " M" + this.m;
+  return (this.s === WB ? 'WB' : 'LB') + ' R' + this.r + ' M' + this.m;
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Initialization helpers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var blank = function () {
   return [Base.NONE, Base.NONE];
@@ -1354,9 +1354,9 @@ var elimination = function (size, p, last, isLong) {
   return matches.sort(Base.compareMatches); // sort so they can be scored in order
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // progression helpers - assume instance context
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 // find the match and position a winner should move "right" to in the current bracket
 var right = function (id) {
@@ -1392,7 +1392,8 @@ var right = function (id) {
     pos = (r + 1) % 2; // LB final winner -> bottom & GF(1) underdog winner -> top
   }
   else if (r === 1) {
-    pos = g % 2; // LBR1 winners move inversely to normal progression
+    // unless downMix, LBR1 winners move inversely to normal progression
+    pos = this.downMix ? 1 : g % 2;
   }
   else {
     // winner from LB always bottom in odd rounds, otherwise normal progression
@@ -1401,6 +1402,26 @@ var right = function (id) {
 
   // normal progression
   return [gId(b, r + 1, ghalf), pos];
+};
+
+// helper to mix down progression to reduce chances of replayed matches
+var mixLbGames = function (p, round, game) {
+  // we know round <= p
+  var numGames = Math.pow(2, p - round);
+  var midPoint = Math.floor(Math.pow(2, p - round - 1)); // midPoint 0 in finals
+
+  // reverse the match list map
+  var reversed = $.odd(Math.floor(round/2));
+  // split the match list map in two change order and rejoin the lists
+  var partitioned = $.even(Math.floor((round + 1)/2));
+
+  if (partitioned) {
+    if (reversed) {
+      return (game > midPoint) ? numGames - game + midPoint + 1 : midPoint - game + 1;
+    }
+    return (game > midPoint) ?  game - midPoint : game + midPoint;
+  }
+  return reversed ? numGames - game + 1 : game;
 };
 
 // find the match and position a loser should move "down" to in the current bracket
@@ -1424,12 +1445,19 @@ var down = function (id) {
     return null;
   }
 
-  // LB drops: on top for (r>2) and (r<=2 if odd g) to match bracket movement
-  var pos = (r > 2 || $.odd(g)) ? 0 : 1;
-  // LBR1 only fed by WBR1 (halves normally), else feed -> r=2x later (w/matching g)
-  var dId = (r === 1) ? gId(LB, 1, Math.floor((g+1)/2)) : gId(LB, (r-1)*2, g);
+  // WBR1 always feeds into LBR1 as if it were WBR2
+  if (r === 1) {
+    return [gId(LB, 1, Math.floor((g+1)/2)), g % 2];
+  }
 
-  return [dId, pos];
+  if (this.downMix) {
+    // always drop on top when downmixing
+    return [gId(LB, (r-1)*2, mixLbGames(p, r, g)), 0];
+  }
+
+  // normal  LB drops: on top for (r>2) and (r<=2 if odd g) to match bracket movement
+  var pos = (r > 2 || $.odd(g)) ? 0 : 1;
+  return [gId(LB, (r-1)*2, g), pos];
 };
 
 // given a direction (one of the above two), move an 'advancer' to that location
@@ -1440,7 +1468,7 @@ var playerInsert = function (progress, adv) {
       , insertM = this.findMatch(id);
 
     if (!insertM) {
-      throw new Error("tournament corrupt: " + id + " not found!");
+      throw new Error('tournament corrupt: ' + id + ' not found!');
     }
 
     insertM.p[pos] = adv;
@@ -1461,9 +1489,9 @@ var woScore = function (progressFn, m) {
   }
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // statistics helpers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var lbPos = function (p, maxr) {
   // model position as y = 2^(k+1) + c_k2^k + 1
@@ -1472,7 +1500,7 @@ var lbPos = function (p, maxr) {
   var metric = 2*p - maxr;
   var k = Math.floor(metric/2) - 1; // every other doubles
   if (k < 0) {
-    throw new Error("lbPos model works for k>=0 only");
+    throw new Error('lbPos model works for k>=0 only');
   }
   var ck = Math.pow(2, k) * (metric % 2);
   return Math.pow(2, k + 1) + 1 + ck;
@@ -1488,46 +1516,48 @@ var placement = function (last, p, maxr) {
   return (last === LB) ? lbPos(p, maxr) : wbPos(p, maxr);
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Interface
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var Duel = Base.sub('Duel', function (opts, initParent) {
   this.isLong = opts.isLong; // isLong for WB => hasBF, isLong for LB => hasGf2
   this.last = opts.last;
   this.limit = opts.limit;
+  this.downMix = opts.downMix;
   this.p = Math.ceil(Math.log(this.numPlayers) / Math.log(2));
   initParent(elimination(this.numPlayers, this.p, this.last, this.isLong));
 
   // manually progress WO markers
   var scorer = woScore.bind(null, this._progress.bind(this));
-  this.findMatches({s: WB, r:1}).forEach(scorer);
+  this.findMatches({s: WB, r: 1}).forEach(scorer);
   if (this.last > WB) {
-    this.findMatches({s: LB, r:1}).forEach(scorer);
+    this.findMatches({s: LB, r: 1}).forEach(scorer);
   }
 });
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Static helpers and constants
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 Duel.configure({
   defaults: function (np, o) {
     o.isLong = !o.short;
     o.last = o.last || WB;
     o.limit = o.limit | 0;
+    o.downMix = o.downMix && o.last > WB;
     return o;
   },
 
   invalid: function (np, opts) {
     if (np < 4 || np > 1024) {
-      return "numPlayers must be >= 4 and <= 1024";
+      return 'numPlayers must be >= 4 and <= 1024';
     }
     if ([WB, LB].indexOf(opts.last) < 0) {
-      return "last elimination bracket must be either WB or LB";
+      return 'last elimination bracket must be either WB or LB';
     }
     if (opts.limit) {
-      return "limits not yet supported";
+      return 'limits not yet supported';
     }
     return null;
   }
@@ -1547,9 +1577,9 @@ Duel.attachNames = function (fn) {
   };
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Expected methods
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 Duel.prototype._progress = function (m) {
   // helper to insert player adv into [id, pos] from progression fns
@@ -1584,13 +1614,13 @@ Duel.prototype._verify = function (m, score) {
     return "cannot override score in walkover'd match";
   }
   if (score[0] === score[1]) {
-    return "cannot draw a duel";
+    return 'cannot draw a duel';
   }
   return null;
 };
 
 Duel.prototype._safe = function (m) {
-  // ensure matches [right, down, down ∘ right] are all unplayed (ignoring WO)
+  // ensure matches [right, down, down ∘ right] are all unplayed (ignoring WO)
   var r = this.right(m.id)
     , d = this.down(m.id)
     , rm = r && this.findMatch(r[0])
@@ -1602,7 +1632,7 @@ Duel.prototype._safe = function (m) {
     // safe iff (match not there, or unplayed, or contains WO markers)
     return !next || !next.m || next.p[0] === WO || next.p[1] === WO;
   });
-}
+};
 
 Duel.prototype._early = function () {
   var gf1 = this.matches[this.matches.length - 2];
@@ -1657,5 +1687,5 @@ Duel.prototype.right = right;
 
 module.exports = Duel;
 
-},{"interlude":1,"tournament":6}]},{},[])("duel")
+},{"interlude":2,"tournament":6}]},{},[])("duel")
 });

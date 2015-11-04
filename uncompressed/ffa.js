@@ -1,67 +1,4 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.FFA = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var group = function (numPlayers, groupSize) {
-  var numGroups = Math.ceil(numPlayers / groupSize);
-  groupSize = group.minimalGroupSize(numPlayers, groupSize, numGroups);
-  var model = numGroups * groupSize;
-
-  var groupList = [];
-  for (var k = 0; k < numGroups; k += 1) {
-    groupList[k] = [];
-  }
-
-  // iterations required to fill groups
-  for (var j = 0; j < Math.ceil(groupSize / 2); j += 1) {
-    // fill each group with pairs that sum to model + 1
-    // until you are in the last iteration (in which may only want one of them)
-    for (var g = 0; g < numGroups; g += 1) {
-      var a = j*numGroups + g + 1;
-
-      groupList[g].push(a);
-      if (groupList[g].length < groupSize) {
-        groupList[g].push(model + 1 - a);
-      }
-    }
-  }
-
-  // remove non-present players and sort by seeding number
-  return groupList.map(function (g) {
-    return g.sort(function (x, y) {
-      return x - y;
-    }).filter(function (p) {
-      return p <= numPlayers;
-    });
-  });
-};
-
-group.minimalGroupSize = function (numPlayers, groupSize) {
-  var numGroups = arguments[2] || Math.ceil(numPlayers / groupSize);
-  while (numGroups * groupSize - numPlayers >= numGroups) {
-    groupSize -= 1; // while all groups have 1 free slot
-  }
-  return groupSize;
-};
-
-module.exports = group;
-
-},{}],2:[function(require,module,exports){
-var $ = require('autonomy');
-
-module.exports = function () {
-  var fns = arguments;
-  return function () {
-    var res = fns[0].apply(this, arguments);
-    for (var i = 1, len = fns.length; i < len; i += 1) {
-      res = fns[i](res);
-    }
-    return res;
-  };
-};
-
-$.extend(module.exports, $);
-$.extend(module.exports, require('operators'));
-$.extend(module.exports, require('subset'));
-
-},{"autonomy":3,"operators":4,"subset":5}],3:[function(require,module,exports){
 var slice = Array.prototype.slice;
 
 // ---------------------------------------------
@@ -330,7 +267,70 @@ $.invoke = function (method) {
 // end - export
 module.exports = $;
 
-},{}],4:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
+var group = function (numPlayers, groupSize) {
+  var numGroups = Math.ceil(numPlayers / groupSize);
+  groupSize = group.minimalGroupSize(numPlayers, groupSize, numGroups);
+  var model = numGroups * groupSize;
+
+  var groupList = [];
+  for (var k = 0; k < numGroups; k += 1) {
+    groupList[k] = [];
+  }
+
+  // iterations required to fill groups
+  for (var j = 0; j < Math.ceil(groupSize / 2); j += 1) {
+    // fill each group with pairs that sum to model + 1
+    // until you are in the last iteration (in which may only want one of them)
+    for (var g = 0; g < numGroups; g += 1) {
+      var a = j*numGroups + g + 1;
+
+      groupList[g].push(a);
+      if (groupList[g].length < groupSize) {
+        groupList[g].push(model + 1 - a);
+      }
+    }
+  }
+
+  // remove non-present players and sort by seeding number
+  return groupList.map(function (g) {
+    return g.sort(function (x, y) {
+      return x - y;
+    }).filter(function (p) {
+      return p <= numPlayers;
+    });
+  });
+};
+
+group.minimalGroupSize = function (numPlayers, groupSize) {
+  var numGroups = arguments[2] || Math.ceil(numPlayers / groupSize);
+  while (numGroups * groupSize - numPlayers >= numGroups) {
+    groupSize -= 1; // while all groups have 1 free slot
+  }
+  return groupSize;
+};
+
+module.exports = group;
+
+},{}],3:[function(require,module,exports){
+var $ = require('autonomy');
+
+module.exports = function () {
+  var fns = arguments;
+  return function () {
+    var res = fns[0].apply(this, arguments);
+    for (var i = 1, len = fns.length; i < len; i += 1) {
+      res = fns[i](res);
+    }
+    return res;
+  };
+};
+
+$.extend(module.exports, $);
+$.extend(module.exports, require('operators'));
+$.extend(module.exports, require('subset'));
+
+},{"autonomy":1,"operators":4,"subset":5}],4:[function(require,module,exports){
 var $ = {}
   , concat = Array.prototype.concat;
 
@@ -900,7 +900,7 @@ o.playable = function (m) {
 
 module.exports = o;
 
-},{"interlude":2}],7:[function(require,module,exports){
+},{"interlude":3}],7:[function(require,module,exports){
 var $ = require('interlude');
 var helper = require('./match');
 
@@ -1309,7 +1309,7 @@ Tournament.prototype.players = function (id) {
 
 module.exports = Tournament;
 
-},{"./match":6,"interlude":2}],"ffa":[function(require,module,exports){
+},{"./match":6,"interlude":3}],"ffa":[function(require,module,exports){
 var $ = require('interlude')
   , group = require('group')
   , Tournament = require('tournament');
@@ -1635,5 +1635,5 @@ FFA.prototype.rawPositions = function (res) {
 
 module.exports = FFA;
 
-},{"group":1,"interlude":2,"tournament":7}]},{},[])("ffa")
+},{"group":2,"interlude":3,"tournament":7}]},{},[])("ffa")
 });
