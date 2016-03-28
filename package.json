@@ -1,6 +1,6 @@
 {
   "name": "tournament-bower",
-  "version": "3.0.0",
+  "version": "3.1.1",
   "description": "@clux/tournament available via bower.",
   "main": "index.js",
   "scripts": {
@@ -21,11 +21,11 @@
   },
   "homepage": "https://github.com/seiyria/tournament-bower#readme",
   "dependencies": {
-    "duel": "^3.1.1",
-    "ffa": "^3.0.0",
-    "groupstage": "^3.0.0",
-    "masters": "^3.0.0",
-    "tiebreaker": "^3.0.0"
+    "duel": "^3.2.0",
+    "ffa": "^3.2.0",
+    "groupstage": "^3.1.1",
+    "masters": "^3.1.0",
+    "tiebreaker": "^3.1.0"
   },
   "devDependencies": {
     "gulp": "^3.9.0",
