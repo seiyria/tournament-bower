@@ -775,21 +775,17 @@ var $ = require('interlude');
 
 var o = { NONE: 0 }; // no player marker same for all tournaments
 
-// since we are factoring out match stuff - maybe we can make id.s / id.r / id.m optional?
-// we do we require it? for simple findMatch?
 o.findMatch = function (ms, id) {
   return $.firstBy(function (m) {
     return (id.s === m.id.s) &&
            (id.r === m.id.r) &&
-           (id.m === m.id.m) &&
-           (m.id.t == null || m.id.t === id.t);
+           (id.m === m.id.m);
   }, ms);
 };
 
 o.findMatches = function (ms, id) {
   return ms.filter(function (m) {
-    return (id.t == null || m.id.t === id.t) &&
-           (id.s == null || m.id.s === id.s) &&
+    return (id.s == null || m.id.s === id.s) &&
            (id.r == null || m.id.r === id.r) &&
            (id.m == null || m.id.m === id.m);
   });
@@ -798,7 +794,6 @@ o.findMatches = function (ms, id) {
 o.findMatchesRanged = function (ms, lb, ub) {
   ub = ub || {};
   return ms.filter(function (m) {
-    // TODO: care about id.t?
     return (lb.s == null || m.id.s >= lb.s) &&
            (lb.r == null || m.id.r >= lb.r) &&
            (lb.m == null || m.id.m >= lb.m) &&
@@ -808,8 +803,6 @@ o.findMatchesRanged = function (ms, lb, ub) {
   });
 };
 
-// TODO: before we move this here - see if it is useful for tourney
-// maybe partition by stages?
 o.partitionMatches = function (ms, splitKey, filterKey, filterVal) {
   var res = [];
   for (var i = 0; i < ms.length; i += 1) {
@@ -835,6 +828,11 @@ o.players = function (ms) {
     return acc.concat(m.p); // collect all players in given matches
   }, []);
   return $.nub(ps).filter($.gt(o.NONE)).sort($.compare());
+};
+
+// This may replace rounds in future versions
+o.rounds = function (ms) {
+  return $.nub(ms.map($.get('id', 'r'))).sort($.compare());
 };
 
 o.upcoming = function (ms, playerId) {
@@ -867,13 +865,13 @@ function Tournament(np, ms) {
 Object.defineProperty(Tournament, 'NONE', { enumerable: true, value: helper.NONE });
 Object.defineProperty(Tournament, 'helpers', { value: helper });
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Multi stage helpers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var replaceMatches = function (inst, resAry) {
   if (helper.started(inst.matches)) {
-    throw new Error("Cannot replace players for a tournament in progress");
+    throw new Error('Cannot replace players for a tournament in progress');
   }
   // because resAry is always sorted by .pos, we simply use this to replace seeds
   inst.matches.forEach(function (m) {
@@ -885,19 +883,19 @@ var replaceMatches = function (inst, resAry) {
 };
 
 Tournament.from = function (Klass, inst, numPlayers, opts) {
-  var err = "Cannot forward from " + inst.name + ": ";
+  var err = 'Cannot forward from ' + inst.name + ': ';
   if (!inst.isDone()) {
-    throw new Error(err + "tournament not done");
+    throw new Error(err + 'tournament not done');
   }
   var res = inst.results();
   if (res.length < numPlayers) {
-    throw new Error(err + "not enough players");
+    throw new Error(err + 'not enough players');
   }
   var luckies = res.filter(function (r) {
     return r.pos <= numPlayers;
   });
   if (luckies.length > numPlayers) {
-    throw new Error(err + "too many players tied to pick out top " + numPlayers);
+    throw new Error(err + 'too many players tied to pick out top ' + numPlayers);
   }
   var forwarded = new Klass(numPlayers, opts);
   replaceMatches(forwarded, res); // correct when class is of standard format
@@ -911,16 +909,16 @@ Tournament.resultEntry = function (resAry, seed) {
       return resAry[i];
     }
   }
-  throw new Error("No result found for seed " + seed + " in result array:" + resAry);
+  throw new Error('No result found for seed ' + seed + ' in result array:' + resAry);
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Misc helpers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var idString = function (id) {
   return (id + '' === '[object Object]') ?
-    "S" + id.s + " R" + id.r + " M" + id.m :
+    'S' + id.s + ' R' + id.r + ' M' + id.m :
     id + '';
 };
 
@@ -928,42 +926,41 @@ Tournament.isInteger = function (n) { // until this gets on Number in ES6
   return Math.ceil(n) === n;
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Inheritance helpers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
-Tournament.sub = function (name, init, Initial) {
-  Initial = Initial || Tournament;
+Tournament.sub = function (name, init, Initial_) {
+  var Initial = Initial_ || Tournament;
 
-  var Klass = function (numPlayers, opts) {
+  var Klass = function (numPlayers, opts_) {
     if (!(this instanceof Klass)) {
-      return new Klass(numPlayers, opts);
+      return new Klass(numPlayers, opts_);
     }
 
     if (!Klass.invalid) {
-      throw new Error(name + " must implement an Invalid function");
+      throw new Error(name + ' must implement an Invalid function');
     }
-    if (Klass.defaults) {
-      // NB: does not modify input unless Klass.defaults does
-      opts = Klass.defaults(numPlayers, opts);
-    }
-    this._opts = opts;
 
-    var invReason = Klass.invalid(numPlayers, opts);
+    Object.defineProperty(this, '_opts', {
+      configurable: true,
+      value: (Klass.defaults ? Klass : Initial).defaults(numPlayers, opts_)
+    });
+
+    var invReason = Klass.invalid(numPlayers, this._opts);
     if (invReason !== null) {
-      console.error("Invalid %d player %s with opts=%j rejected",
-        numPlayers, name, opts
+      this._opts.log.error('Invalid %d player %s with opts=%j rejected',
+        numPlayers, name, this._opts
       );
-      throw new Error("Cannot construct " + name + ": " + invReason);
+      throw new Error('Cannot construct ' + name + ': ' + invReason);
     }
 
     this.numPlayers = numPlayers;
     this.name = name;
 
     // call given init method, and pass in parent constructor as cb
-    init.call(this, opts, Initial.bind(this, numPlayers));
+    init.call(this, this._opts, Initial.bind(this, numPlayers));
   };
-  Klass.name = name;
   Initial.inherit(Klass, Initial);
   return Klass;
 };
@@ -971,11 +968,13 @@ Tournament.sub = function (name, init, Initial) {
 // two statics that can be overridden with configure
 Tournament.invalid = $.constant(null);
 Tournament.defaults = function (np, opts) {
-  return $.extend({}, opts || {});
+  var o = $.extend({}, opts || {});
+  o.log = opts && opts.log ? opts.log : console;
+  return o;
 };
 
-Tournament.configure = function (Klass, obj, Initial) {
-  Initial = Initial || Tournament;
+Tournament.configure = function (Klass, obj, Initial_) {
+  var Initial = Initial_ || Tournament;
   if (obj.defaults) {
     Klass.defaults = function (np, opts) {
       return obj.defaults(np, Initial.defaults(np, opts));
@@ -987,10 +986,9 @@ Tournament.configure = function (Klass, obj, Initial) {
   if (obj.invalid) {
     Klass.invalid = function (np, opts) {
       if (!Tournament.isInteger(np)) {
-        return "numPlayers must be a finite integer";
+        return 'numPlayers must be a finite integer';
       }
-      opts = Klass.defaults(np, opts);
-      var invReason = obj.invalid(np, opts);
+      var invReason = obj.invalid(np, Klass.defaults(np, opts));
       if (invReason !== null) {
         return invReason;
       }
@@ -1002,8 +1000,8 @@ Tournament.configure = function (Klass, obj, Initial) {
   }
 };
 
-Tournament.inherit = function (Klass, Initial) {
-  Initial = Initial || Tournament;
+Tournament.inherit = function (Klass, Initial_) {
+  var Initial = Initial_ || Tournament;
   Klass.prototype = Object.create(Initial.prototype);
 
   // Ensure deeper sub classes preserve chains whenever they are set up
@@ -1049,9 +1047,9 @@ Tournament.inherit = function (Klass, Initial) {
   };
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Comparators and sorters
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 // ensures first matches first and (for most part) forEach scorability
 // similarly how it's read in many cases: WB R2 G3, G1 R1 M1
@@ -1076,9 +1074,9 @@ Tournament.sorted = function (m) {
   return $.zip(m.p, m.m).sort(Tournament.compareZip).map($.get('0'));
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Tie computers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 // tie position an assumed sorted resAry using a metric fn
 // the metric fn must be sufficiently linked to the sorting fn used
@@ -1129,9 +1127,9 @@ Tournament.matchTieCompute = function (zipSlice, startIdx, cb) {
   }
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Prototype interface that expects certain implementations
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 Tournament.prototype.isDone = function () {
   return this.matches.every($.get('m')) || this._early();
@@ -1140,20 +1138,20 @@ Tournament.prototype.isDone = function () {
 Tournament.prototype.unscorable = function (id, score, allowPast) {
   var m = this.findMatch(id);
   if (!m) {
-    return idString(id) + " not found in tournament";
+    return idString(id) + ' not found in tournament';
   }
   if (!this.isPlayable(m)) {
-    return idString(id) + " not ready - missing players";
+    return idString(id) + ' not ready - missing players';
   }
   if (!Array.isArray(score) || !score.every(Number.isFinite)) {
-    return idString(id) + " scores must be a numeric array";
+    return idString(id) + ' scores must be a numeric array';
   }
   if (score.length !== m.p.length) {
-    return idString(id) + " scores must have length " + m.p.length;
+    return idString(id) + ' scores must have length ' + m.p.length;
   }
   // if allowPast - you can do anything - but if not, it has to be safe
   if (!allowPast && Array.isArray(m.m) && !this._safe(m)) {
-    return idString(id) + " cannot be re-scored";
+    return idString(id) + ' cannot be re-scored';
   }
   return this._verify(m, score);
 };
@@ -1161,8 +1159,8 @@ Tournament.prototype.unscorable = function (id, score, allowPast) {
 Tournament.prototype.score = function (id, score) {
   var invReason = this.unscorable(id, score, true);
   if (invReason !== null) {
-    console.error("failed scoring match %s with %j", idString(id), score);
-    console.error("reason:", invReason);
+    this._opts.log.error('failed scoring match %s with %j', idString(id), score);
+    this._opts.log.error('reason:', invReason);
     return false;
   }
   var m = this.findMatch(id);
@@ -1175,8 +1173,8 @@ Tournament.prototype.score = function (id, score) {
 Tournament.prototype.results = function () {
   var players = this.players();
   if (this.numPlayers !== players.length) {
-    var why = players.length + " !== " + this.numPlayers;
-    throw new Error(this.name + " initialized numPlayers incorrectly: " + why);
+    var why = players.length + ' !== ' + this.numPlayers;
+    throw new Error(this.name + ' initialized numPlayers incorrectly: ' + why);
   }
 
   var res = new Array(this.numPlayers);
@@ -1199,9 +1197,9 @@ Tournament.prototype.results = function () {
     res.sort(Tournament.compareRes); // sensible default
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Prototype convenience methods
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 Tournament.prototype.resultsFor = function (seed) {
   return $.firstBy(function (r) {
@@ -1275,31 +1273,32 @@ function Id(r) {
 }
 
 Id.prototype.toString = function () {
-  return "R" + this.r; // always only one match per round
+  return 'R' + this.r; // always only one match per round
 };
 
 var mId = function (r) {
   return new Id(r);
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // init helpers
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var makeMatches = function (np, kos) {
   var ms = [];
   ms.push({ id: mId(1), p: $.range(np) });
+  var ps = np;
   for (var i = 0; i < kos.length; i += 1) {
     // create the next round from current ko parameter
-    np -= kos[i];
-    ms.push({ id: mId(i+2), p: $.replicate(np, Base.NONE) });
+    ps -= kos[i];
+    ms.push({ id: mId(i+2), p: $.replicate(ps, Base.NONE) });
   }
   return ms;
 };
 
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 // Interface
-//------------------------------------------------------------------
+// ------------------------------------------------------------------
 
 var Masters = Base.sub('Masters', function (opts, initParent) {
   this.knockouts = opts.knockouts;
@@ -1323,21 +1322,22 @@ Masters.configure({
 
   invalid: function (np, opts) {
     if (np < 3) {
-      return "need at least 3 players";
+      return 'need at least 3 players';
     }
     var kos = opts.knockouts;
     if (!Array.isArray(kos) || !kos.every(Base.isInteger)) {
-      return "knockouts must be an array of positive integers";
+      return 'knockouts must be an array of positive integers';
     }
+    var ps = np;
     for (var i = 0; i < kos.length; i += 1) {
       var ko = kos[i];
       if (ko < 1) {
-        return "must knock out a positive number of players each round";
+        return 'must knock out a positive number of players each round';
       }
-      if (np - ko <= 1) {
-        return "must leave at least two players in every match";
+      if (ps - ko <= 1) {
+        return 'must leave at least two players in every match';
       }
-      np -= ko;
+      ps -= ko;
     }
     return null;
   }
@@ -1358,7 +1358,7 @@ Masters.prototype._verify = function (match, score) {
   var ko = this.knockouts[match.id.r - 1] | 0;
   var adv = match.p.length - ko;
   if (ko > 0 && score[adv-1] === score[adv]) {
-    return "scores must unambiguous decide who is in the top " + adv;
+    return 'scores must unambiguous decide who is in the top ' + adv;
   }
   return null;
 };
@@ -1400,6 +1400,7 @@ Masters.prototype._stats = function (res, m) {
   return res;
 };
 
+Masters.Id = Id;
 module.exports = Masters;
 
 },{"interlude":2,"tournament":6}]},{},[])("masters")

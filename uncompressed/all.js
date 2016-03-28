@@ -1,4 +1,4 @@
-(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Duel = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.Tournament = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var slice = Array.prototype.slice;
 
 // ---------------------------------------------
@@ -268,6 +268,60 @@ $.invoke = function (method) {
 module.exports = $;
 
 },{}],2:[function(require,module,exports){
+var group = function (numPlayers, groupSize) {
+  var numGroups = Math.ceil(numPlayers / groupSize);
+  groupSize = group.minimalGroupSize(numPlayers, groupSize, numGroups);
+  var model = numGroups * groupSize;
+
+  var groupList = [];
+  for (var k = 0; k < numGroups; k += 1) {
+    groupList[k] = [];
+  }
+
+  // iterations required to fill groups
+  for (var j = 0; j < Math.ceil(groupSize / 2); j += 1) {
+    // fill each group with pairs that sum to model + 1
+    // until you are in the last iteration (in which may only want one of them)
+    for (var g = 0; g < numGroups; g += 1) {
+      var a = j*numGroups + g + 1;
+
+      groupList[g].push(a);
+      if (groupList[g].length < groupSize) {
+        groupList[g].push(model + 1 - a);
+      }
+    }
+  }
+
+  // remove non-present players and sort by seeding number
+  return groupList.map(function (g) {
+    return g.sort(function (x, y) {
+      return x - y;
+    }).filter(function (p) {
+      return p <= numPlayers;
+    });
+  });
+};
+
+group.fromArray = function (ary, groupSize) {
+  return group(ary.length, groupSize).map(function (group) {
+    return group.map(function (seed) {
+      return ary[seed-1];
+    });
+  });
+};
+
+
+group.minimalGroupSize = function (numPlayers, groupSize) {
+  var numGroups = arguments[2] || Math.ceil(numPlayers / groupSize);
+  while (numGroups * groupSize - numPlayers >= numGroups) {
+    groupSize -= 1; // while all groups have 1 free slot
+  }
+  return groupSize;
+};
+
+module.exports = group;
+
+},{}],3:[function(require,module,exports){
 var $ = require('autonomy');
 
 module.exports = function () {
@@ -285,7 +339,7 @@ $.extend(module.exports, $);
 $.extend(module.exports, require('operators'));
 $.extend(module.exports, require('subset'));
 
-},{"autonomy":1,"operators":3,"subset":4}],3:[function(require,module,exports){
+},{"autonomy":1,"operators":4,"subset":6}],4:[function(require,module,exports){
 var $ = {}
   , concat = Array.prototype.concat;
 
@@ -551,7 +605,38 @@ $.lte = function (y) {
 
 module.exports = $;
 
-},{}],4:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
+const DUMMY = -1;
+// returns an array of round representations (array of player pairs).
+// http://en.wikipedia.org/wiki/Round-robin_tournament#Scheduling_algorithm
+module.exports = function (n, ps) {  // n = num players
+  var rs = [];                  // rs = round array
+  if (!ps) {
+    ps = [];
+    for (var k = 1; k <= n; k += 1) {
+      ps.push(k);
+    }
+  } else {
+    ps = ps.slice();
+  }
+
+  if (n % 2 === 1) {
+    ps.push(DUMMY); // so we can match algorithm for even numbers
+    n += 1;
+  }
+  for (var j = 0; j < n - 1; j += 1) {
+    rs[j] = []; // create inner match array for round j
+    for (var i = 0; i < n / 2; i += 1) {
+      if (ps[i] !== DUMMY && ps[n - 1 - i] !== DUMMY) {
+        rs[j].push([ps[i], ps[n - 1 - i]]); // insert pair as a match
+      }
+    }
+    ps.splice(1, 0, ps.pop()); // permutate for next round
+  }
+  return rs;
+};
+
+},{}],6:[function(require,module,exports){
 var $ = {};
 
 // ---------------------------------------------
@@ -770,7 +855,7 @@ $.isSubsetOf = function (xs, ys, proper) {
 // end - export
 module.exports = $;
 
-},{}],5:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 var $ = require('interlude');
 
 var o = { NONE: 0 }; // no player marker same for all tournaments
@@ -853,7 +938,7 @@ o.playable = function (m) {
 
 module.exports = o;
 
-},{"interlude":2}],6:[function(require,module,exports){
+},{"interlude":3}],8:[function(require,module,exports){
 var $ = require('interlude');
 var helper = require('./match');
 
@@ -1262,7 +1347,7 @@ Tournament.prototype.players = function (id) {
 
 module.exports = Tournament;
 
-},{"./match":5,"interlude":2}],"duel":[function(require,module,exports){
+},{"./match":7,"interlude":3}],"duel":[function(require,module,exports){
 var Base = require('tournament')
   , $ = require('interlude');
 
@@ -1689,5 +1774,910 @@ Duel.prototype.right = right;
 Duel.Id = Id;
 module.exports = Duel;
 
-},{"interlude":2,"tournament":6}]},{},[])("duel")
+},{"interlude":3,"tournament":8}],"ffa":[function(require,module,exports){
+var $ = require('interlude')
+  , group = require('group')
+  , Tournament = require('tournament');
+
+function Id(r, m) {
+  this.s = 1;
+  this.r = r;
+  this.m = m;
+}
+
+Id.prototype.toString = function () {
+  return 'R' + this.r + ' M' + this.m;
+};
+
+var mId = function (r, m) {
+  return new Id(r, m);
+};
+
+//------------------------------------------------------------------
+// Initialization helpers
+//------------------------------------------------------------------
+
+var unspecify = function (grps) {
+  return grps.map(function (grp) {
+    return $.replicate(grp.length, Tournament.NONE);
+  });
+};
+
+var makeMatches = function (np, grs, adv) {
+  var matches = []; // pushed in sort order
+  // rounds created iteratively - know configuration valid at this point so just
+  // repeat the calculation in the validation
+  for (var i = 0; i < grs.length; i += 1) {
+    var a = adv[i]
+      , gs = grs[i]
+      , numGroups = Math.ceil(np / gs)
+      , grps = group(np, gs);
+
+    if (numGroups !== grps.length) {
+      throw new Error('internal FFA construction error');
+    }
+    if (i > 0) {
+      // only fill in seeding numbers for round 1, otherwise placeholders
+      grps = unspecify(grps);
+    }
+
+    // fill in matches
+    for (var m = 0; m < grps.length; m += 1) {
+      matches.push({id: mId(i+1, m+1), p: grps[m]}); // matches 1-indexed
+    }
+    // reduce players left (for next round - which will exist if a is defined)
+    np = numGroups*a;
+  }
+  return matches;
+};
+
+var prepRound = function (currRnd, nxtRnd, adv) {
+  var top = currRnd.map(function (m) {
+    return $.zip(m.p, m.m).sort(Tournament.compareZip).slice(0, adv);
+  });
+
+  // now flatten and sort across matches
+  // this essentially re-seeds players for the next round
+  top = $.pluck(0, $.flatten(top).sort(Tournament.compareZip));
+
+  // re-find group size from maximum length of zeroed player array in next round
+  var grs = $.maximum($.pluck('length', $.pluck('p', nxtRnd)));
+
+  // set all next round players with the fairly grouped set
+  group(top.length, grs).forEach(function (group, k) {
+    // replaced nulled out player array with seeds mapped to corr. top placers
+    nxtRnd[k].p = group.map(function (seed) {
+      return top[seed-1]; // NB: top is zero indexed
+    });
+  });
+};
+
+//------------------------------------------------------------------
+// Invalid helpers
+//------------------------------------------------------------------
+
+var roundInvalid = function (np, grs, adv, numGroups) {
+  // the group size in here refers to the maximal reduced group size
+  if (np < 2) {
+    return 'needs at least 2 players';
+  }
+  if (grs < 2) {
+    return 'group size must be at least 2';
+  }
+  if (adv >= grs) {
+    return 'must advance less than the group size';
+  }
+  var isUnfilled = (np % numGroups) > 0;
+  if (isUnfilled && adv >= grs - 1) {
+    return 'must advance less than the smallest match size';
+  }
+  if (adv <= 0) {
+    return 'must eliminate players each match';
+  }
+  return null;
+};
+
+var finalInvalid = function (leftOver, limit, gLast) {
+  if (leftOver < 2) {
+    return 'must contain at least 2 players'; // force >4 when using limits
+  }
+  var lastNg = Math.ceil(leftOver / gLast);
+  if (limit > 0) { // using limits
+    if (limit >= leftOver) {
+      return 'limit must be less than the remaining number of players';
+    }
+    // need limit to be a multiple of numGroups (otherwise tiebreaks necessary)
+    if (limit % lastNg !== 0) {
+      return 'number of matches must divide limit';
+    }
+  }
+  return null;
+};
+
+var invalid = function (np, grs, adv, limit) {
+  if (np < 2) {
+    return 'number of players must be at least 2';
+  }
+  if (!grs.length || !grs.every(Tournament.isInteger)) {
+    return 'sizes must be a non-empty array of integers';
+  }
+  if (!adv.every(Tournament.isInteger) || grs.length !== adv.length + 1) {
+    return 'advancers must be a sizes.length-1 length array of integers';
+  }
+
+  var numGroups = 0;
+  for (var i = 0; i < adv.length; i += 1) {
+    // loop over adv as then both a and g exist
+    var a = adv[i];
+    var g = grs[i];
+    // calculate how big the groups are
+    numGroups = Math.ceil(np / g);
+    var gActual = group.minimalGroupSize(np, g);
+
+    // and ensure with group reduction that eliminationValid for reduced params
+    var invReason = roundInvalid(np, gActual, a, numGroups);
+    if (invReason !== null) {
+      return 'round ' + (i+1) + ' ' + invReason;
+    }
+    // return how many players left so that np is updated for next itr
+    np = numGroups*a;
+  }
+  // last round and limit checks
+  var invFinReason = finalInvalid(np, limit, grs[grs.length-1]);
+  if (invFinReason !== null) {
+    return 'final round ' + invFinReason;
+  }
+
+  // nothing found - ok to create
+  return null;
+};
+
+//------------------------------------------------------------------
+// Interface
+//------------------------------------------------------------------
+
+var FFA = Tournament.sub('FFA', function (opts, initParent) {
+  this.limit = opts.limit;
+  this.advs = opts.advancers;
+  this.sizes = opts.sizes;
+  initParent(makeMatches(this.numPlayers, this.sizes, this.advs));
+});
+
+//------------------------------------------------------------------
+// Helpers and constants
+//------------------------------------------------------------------
+
+FFA.configure({
+  defaults: function (np, opts) {
+    opts.limit = opts.limit | 0;
+    opts.sizes = Array.isArray(opts.sizes) ? opts.sizes : [np];
+    opts.advancers = Array.isArray(opts.advancers) ? opts.advancers : [];
+    return opts;
+  },
+  invalid: function (np, opts) {
+    return invalid(np, opts.sizes, opts.advancers, opts.limit);
+  }
+});
+
+FFA.prototype.limbo = function (playerId) {
+  // if player reached currentRound, he may be waiting for generation of nextRound
+  var m = $.firstBy(function (g) {
+    return g.p.indexOf(playerId) >= 0 && g.m;
+  }, this.currentRound() || []);
+
+  if (m) {
+    // will he advance to nextRound ?
+    var adv = this.advs[m.id.r - 1];
+    if (Tournament.sorted(m).slice(0, adv).indexOf(playerId) >= 0) {
+      return {s: 1, r: m.id.r + 1}; // TODO: no toString representation for this
+    }
+  }
+};
+
+// ------------------------------------------------------------------
+// Expected methods
+// ------------------------------------------------------------------
+
+FFA.prototype._progress = function (match) {
+  var adv = this.advs[match.id.r - 1] || 0;
+  var currRnd = this.findMatches({r: match.id.r});
+  if (currRnd.every($.get('m')) && adv > 0) {
+    prepRound(currRnd, this.findMatches({r: match.id.r + 1}), adv);
+  }
+};
+
+FFA.prototype._safe = function (match) {
+  var nextRnd = this.findMatches({ r: match.id.r + 1 });
+  // safe iff next round has not started
+  return nextRnd.every(function (m) {
+    return !Array.isArray(m.m);
+  });
+};
+
+FFA.prototype._verify = function (match, score) {
+  var adv = this.advs[match.id.r - 1] || 0;
+  if (adv > 0 && score[adv] === score[adv - 1]) {
+    return 'scores must unambiguous decide who advances';
+  }
+  if (!adv && this.limit > 0) {
+    // number of groups in last round is the match number of the very last match
+    // because of the ordering this always works!
+    var lastNG = this.matches[this.matches.length-1].id.m;
+    var cutoff = this.limit/lastNG; // NB: lastNG divides limit (from finalInvalid)
+    if (score[cutoff] === score[cutoff - 1]) {
+      return 'scores must decide who advances in final round with limits';
+    }
+  }
+  return null;
+};
+
+FFA.prototype._stats = function (res, m) {
+  if (m.m) {
+    var adv = this.advs[m.id.r - 1] || 0;
+    $.zip(m.p, m.m).sort(Tournament.compareZip).forEach(function (t, j, top) {
+      var p = Tournament.resultEntry(res, t[0]);
+      p.for += t[1];
+      p.against += (top[0][1] - t[1]); // difference with winner
+      if (j < adv) {
+        p.wins += 1;
+      }
+    });
+  }
+  return res;
+};
+
+var compareMulti = function (x, y) {
+  return (x.pos - y.pos) ||
+         ((y.for - y.against) - (x.for - x.against)) ||
+         (x.seed - y.seed);
+};
+
+FFA.prototype._sort = function (res) {
+  var limit = this.limit;
+  var advs = this.advs;
+  var sizes = this.sizes;
+  var maxround = this.sizes.length;
+
+  // gradually improve scores for each player by looking at later and later rounds
+  this.rounds().forEach(function (rnd, k) {
+    var rndPs = $.flatten($.pluck('p', rnd)).filter($.gt(Tournament.NONE));
+    rndPs.forEach(function (p) {
+      Tournament.resultEntry(res, p).pos = rndPs.length; // tie players that got here
+    });
+
+    var isFinal = (k === maxround - 1);
+    var adv = advs[k] || 0;
+    var wlim = (limit > 0 && isFinal) ? limit / rnd.length : adv;
+    var nonAdvancers = $.replicate(sizes[k] - adv, []); // all in final
+
+    // collect non-advancers - and set wins
+    rnd.filter($.get('m')).forEach(function (m) {
+      var startIdx = isFinal ? 0 : adv;
+      var top = $.zip(m.p, m.m).sort(Tournament.compareZip).slice(startIdx);
+      Tournament.matchTieCompute(top, startIdx, function (p, pos) {
+        var resEl = Tournament.resultEntry(res, p);
+        if (pos <= wlim || (pos === 1 && !adv)) {
+          resEl.wins += 1;
+        }
+        if (isFinal) {
+          resEl.gpos = pos; // for rawPositions
+        }
+        nonAdvancers[pos-adv-1].push(resEl);
+      });
+    });
+
+    // nonAdvancers will be tied between the round based on their mpos
+    var posctr = adv*rnd.length + 1;
+    nonAdvancers.forEach(function (xplacers) {
+      xplacers.forEach(function (r) {
+        r.pos = posctr;
+      });
+      posctr += xplacers.length;
+    });
+  });
+
+  return res.sort(compareMulti);
+};
+
+// helper method to be compatible with TieBreaker
+FFA.prototype.rawPositions = function (res) {
+  if (!this.isDone()) {
+    throw new Error('cannot tiebreak a FFA tournament until it is finished');
+  }
+  var maxround = this.sizes.length;
+  var finalRound = this.findMatches({ r: maxround });
+  var posAry = finalRound.map(function (m) {
+    var seedAry = $.replicate(m.p.length, []);
+    m.p.forEach(function (p) {
+      var resEl = Tournament.resultEntry(res, p);
+      $.insert(seedAry[(resEl.gpos || resEl.pos)-1], p);
+    });
+    return seedAry;
+  });
+  return posAry;
+};
+
+// ------------------------------------------------------------------
+
+FFA.Id = Id;
+module.exports = FFA;
+
+},{"group":2,"interlude":3,"tournament":8}],"groupstage":[function(require,module,exports){
+var $ = require('interlude')
+  , Tournament = require('tournament')
+  , robin = require('roundrobin')
+  , grouper = require('group');
+
+function Id(g, r, m) {
+  if (!(this instanceof Id)) {
+    return new Id(g, r, m);
+  }
+  this.s = g;
+  this.r = r;
+  this.m = m;
+}
+
+Id.prototype.toString = function () {
+  return 'G' + this.s + ' R' + this.r + ' M' + this.m;
+};
+
+// ------------------------------------------------------------------
+
+var mapOdd = function (n) {
+  return n*2 - 1;
+};
+var mapEven = function (n) {
+  return n*2;
+};
+
+var makeMatches = function (numPlayers, groupSize, hasAway) {
+  var groups = grouper(numPlayers, groupSize);
+  var matches = [];
+  for (var g = 0; g < groups.length; g += 1) {
+    var group = groups[g];
+    // make robin rounds for the group
+    var rnds = robin(group.length, group);
+    for (var r = 0; r < rnds.length; r += 1) {
+      var rnd = rnds[r];
+      for (var m = 0; m < rnd.length; m += 1) {
+        var plsH = rnd[m];
+        if (!hasAway) { // players only meet once
+          matches.push({ id: new Id(g+1, r+1, m+1), p : plsH });
+        }
+        else { // players meet twice
+          var plsA = plsH.slice().reverse();
+          matches.push({ id: new Id(g+1, mapOdd(r+1), m+1), p: plsH });
+          matches.push({ id: new Id(g+1, mapEven(r+1), m+1), p: plsA });
+        }
+      }
+    }
+  }
+  return matches.sort(Tournament.compareMatches);
+};
+
+// ------------------------------------------------------------------
+
+var GroupStage = Tournament.sub('GroupStage', function (opts, initParent) {
+  var ms = makeMatches(this.numPlayers, opts.groupSize, opts.meetTwice);
+  this.numGroups = $.maximum(ms.map($.get('id', 's')));
+  this.groupSize = Math.ceil(this.numPlayers / this.numGroups); // perhaps reduced
+  this.winPoints = opts.winPoints;
+  this.tiePoints = opts.tiePoints;
+  this.scoresBreak = opts.scoresBreak;
+  initParent(ms);
+});
+
+GroupStage.configure({
+  defaults: function (np, o) {
+    // no group size set => league
+    o.groupSize = Number(o.groupSize) || np;
+    o.meetTwice = Boolean(o.meetTwice);
+    o.winPoints = Number.isFinite(o.winPoints) ? o.winPoints : 3;
+    o.tiePoints = Number.isFinite(o.tiePoints) ? o.tiePoints : 1;
+    o.scoresBreak = Boolean(o.scoresBreak);
+    return o;
+  },
+
+  invalid: function (np, opts) {
+    if (np < 2) {
+      return 'numPlayers cannot be less than 2';
+    }
+    if (opts.groupSize < 2) {
+      return 'groupSize cannot be less than 2';
+    }
+    if (opts.groupSize > np) {
+      return 'groupSize cannot be greater than numPlayers';
+    }
+    return null;
+  }
+});
+
+// helper
+GroupStage.prototype.groupFor = function (playerId) {
+  for (var i = 0; i < this.matches.length; i += 1) {
+    var m = this.matches[i];
+    if (m.p.indexOf(playerId) >= 0) {
+      return m.id.s;
+    }
+  }
+};
+
+// no one-round-at-a-time restrictions so can always recore
+GroupStage.prototype._safe = $.constant(true);
+
+GroupStage.prototype._initResult = function (seed) {
+  return {
+    grp: this.groupFor(seed),
+    gpos: this.groupSize,
+    pts: 0,
+    draws: 0,
+    losses: 0
+  };
+};
+
+GroupStage.prototype._stats = function (res, m) {
+  if (!m.m) {
+    return res;
+  }
+  var p0 = Tournament.resultEntry(res, m.p[0]);
+  var p1 = Tournament.resultEntry(res, m.p[1]);
+
+  if (m.m[0] === m.m[1]) {
+    p0.pts += this.tiePoints;
+    p1.pts += this.tiePoints;
+    p0.draws += 1;
+    p1.draws += 1;
+  }
+  else {
+    var w = (m.m[0] > m.m[1]) ? p0 : p1;
+    var l = (m.m[0] > m.m[1]) ? p1 : p0;
+    w.wins += 1;
+    w.pts += this.winPoints;
+    l.losses += 1;
+  }
+  p0.for += m.m[0];
+  p1.for += m.m[1];
+  p0.against += m.m[1];
+  p1.against += m.m[0];
+  return res;
+};
+
+var resultsByGroup = function (results, numGroups) {
+  var grps = $.replicate(numGroups, []);
+  for (var k = 0; k < results.length; k += 1) {
+    var p = results[k];
+    grps[p.grp - 1].push(p);
+  }
+  return grps;
+};
+
+var tieCompute = function (resAry, startPos, scoresBreak, cb) {
+  // provide the metric for resTieCompute which look factors: points and score diff
+  Tournament.resTieCompute(resAry, startPos, cb, function metric(r) {
+    var val = 'PTS' + r.pts;
+    if (scoresBreak) {
+      val += 'DIFF' + (r.for - r.against);
+    }
+    return val;
+  });
+};
+
+var compareResults = function (x, y) {
+  var xScore = x.for - x.against;
+  var yScore = y.for - y.against;
+  return (y.pts - x.pts) || (yScore - xScore) || (x.seed - y.seed);
+};
+
+var finalCompare = function (x, y) {
+  return (x.pos - y.pos) ||  compareResults(x, y);
+};
+
+GroupStage.prototype._sort = function (res) {
+  var scoresBreak = this.scoresBreak;
+  res.sort(compareResults);
+
+  // tieCompute within groups to get the `gpos` attribute
+  // at the same time build up array of xplacers
+  var xarys = $.replicate(this.groupSize, []);
+  resultsByGroup(res, this.numGroups).forEach(function (g) { // g sorted as res is
+    tieCompute(g, 0, scoresBreak, function (r, pos) {
+      r.gpos = pos;
+      xarys[pos-1].push(r);
+    });
+  });
+
+  if (this.isDone()) {
+    // position based entirely on x-placement (ignore pts/scorediff across grps)
+    var posctr = 1;
+    xarys.forEach(function (xplacers) {
+      xplacers.forEach(function (r) {
+        r.pos = posctr;
+      });
+      posctr += xplacers.length;
+    });
+  }
+  return res.sort(finalCompare); // ensure sorted by pos primarily
+};
+
+// helper method to be compatible with TieBreaker
+GroupStage.prototype.rawPositions = function (res) {
+  return resultsByGroup(res, this.numGroups).map(function (grp) {
+    // NB: need to create the empty arrays to let result function as a lookup
+    var seedAry = $.replicate(grp.length, []);
+    for (var k = 0; k < grp.length; k += 1) {
+      var p = grp[k];
+      $.insert(seedAry[p.gpos-1], p.seed); // insert ensures ascending order
+    }
+    return seedAry;
+  });
+};
+
+// ------------------------------------------------------------------
+
+GroupStage.id = Id; // deprecated - should be capitalized
+GroupStage.Id = Id;
+module.exports = GroupStage;
+
+},{"group":2,"interlude":3,"roundrobin":5,"tournament":8}],"tiebreaker":[function(require,module,exports){
+var $ = require('interlude')
+  , GroupStage = require('groupstage')
+  , Base = require('tournament');
+
+// for grouped breakers
+function Id(s, r, m, isSimple) {
+  this.s = s;
+  this.r = r;
+  this.m = m;
+  Object.defineProperty(this, '_simple', {
+    value: isSimple
+  });
+}
+Id.prototype.toString = function () {
+  return this._simple ?
+    'S' + this.s + ' TB' :
+    'S' + this.s + ' TB R' + this.r + ' M' + this.m;
+};
+
+var simpleId = function (s) {
+  return new Id(s, 1, 1, true);
+};
+
+// ------------------------------------------------------------------
+// Init helpers
+// ------------------------------------------------------------------
+
+var createClusters = function (posAry, limit, breakOneUp) {
+  var numSections = posAry.length;
+  var position = Math.ceil(limit / numSections);
+
+  return posAry.map(function (seedAry) {
+    var unchosen = position;
+    // need a match in this section if no clear position-placer
+    for (var i = 0; unchosen > 0; i += 1) {
+      var xps = seedAry[i];
+      var needForBetween = xps.length >1 && xps.length === unchosen && breakOneUp;
+      if (xps.length > unchosen || needForBetween) {
+        return xps.slice();
+      }
+      unchosen -= xps.length; // next cluster must be smaller to fit
+    }
+    return []; // nothing to break this section
+  });
+};
+
+var createGroupStageBreaker = function (cluster, section, gsOpts) {
+  var gs = new GroupStage(cluster.length, gsOpts);
+  gs.tbSection = section;
+  gs.matches.forEach(function (m) {
+    // NB: cannot modify section as GroupStage relies on it being < numGroups
+    m.p.forEach(function (oldSeed, i) {
+      // but can safely modify seeds in match - equivalent to using .from
+      m.p[i] = cluster[oldSeed-1];
+    });
+  });
+  return gs;
+};
+
+var createFfaBreaker = function (cluster, section) {
+  return { id: simpleId(section), p: cluster };
+};
+
+var createMatches = function (posAry, limit, opts) {
+  var xs = [];
+  createClusters(posAry, limit, opts.breakForBetween).forEach(function (ps, i) {
+    if (ps.length) {
+      var matchMaker = opts.grouped ? createGroupStageBreaker : createFfaBreaker;
+      xs.push(matchMaker(ps, i+1, opts.groupOpts));
+    }
+  });
+  return xs;
+};
+
+// ------------------------------------------------------------------
+// results / rawPositions helpers
+// ------------------------------------------------------------------
+
+// NB: expects instance context
+var getWithinBreakerScore = function (section) {
+  if (!this.grouped) {
+    var ffaM = this.findMatch({ s: section, r: 1, m: 1 });
+    return (ffaM && ffaM.m) ? ffaM : null;
+  }
+
+  var gs = $.firstBy(function (stage) {
+    return stage.tbSection === section;
+  }, this.groupStages);
+
+  if (gs == null || !gs.isDone()) {
+    return null;
+  }
+  var gsRes = gs.results();
+  var positions = gs.rawPositions(gsRes);
+  var match = { p: [], m: [] }; // match equivalent
+  // convert from rawPosition - only used by matchTieCompute in updater
+  positions[0].forEach(function (xps, x) {
+    xps.forEach(function (p) {
+      match.p.push(p);
+      match.m.push(positions[0].length-x);
+    });
+  });
+  return match;
+};
+
+// split up the posAry entried cluster found in corresponding within section breakers
+var updateSeedAry = function (seedAry, match) {
+  var res = $.replicate(seedAry.length, []);
+  seedAry.forEach(function (xps, x) {
+    // NB: while we are not writing 1-1 from seedAry to res, we are always
+    // making sure not to overwrite what we had in previous iterations
+    if (xps.indexOf(match.p[0]) < 0) {
+      res[x] = res[x].concat(xps);
+      return;
+    }
+    // always tieCompute match because only strict mode has guaranteed non-ties
+    var sorted = $.zip(match.p, match.m).sort(Base.compareZip);
+    Base.matchTieCompute(sorted, 0, function (p, pos) {
+      res[x+pos-1].push(p);
+    });
+  });
+  return res;
+};
+
+// ------------------------------------------------------------------
+// Interface
+// ------------------------------------------------------------------
+
+function TieBreaker(oldRes, posAry, limit, opts) {
+  if (!(this instanceof TieBreaker)) {
+    return new TieBreaker(oldRes, posAry, limit, opts);
+  }
+  this._opts = TieBreaker.defaults(opts);
+  var invReason = TieBreaker.invalid(oldRes, posAry, this._opts, limit);
+  if (invReason !== null) {
+    this._opts.log.error('Invalid %d player TieBreaker with oldRes=%j rejected, opts=%j',
+      limit, oldRes, this._opts
+    );
+    throw new Error('Cannot construct TieBreaker: ' + invReason);
+  }
+
+  var xs = createMatches(posAry, limit, this._opts);
+  var ms = [];
+  if (this._opts.grouped) {
+    for (var i = 0; i < xs.length; i += 1) {
+      for (var j = 0; j < xs[i].matches.length; j += 1) {
+        var m = xs[i].matches[j];
+        // NB: modifying the matches here so that outside world sees the section
+        // corr. to the section they came from - whereas gs inst needs s === 1
+        ms.push({
+          id: new Id(xs[i].tbSection, m.id.r, m.id.m),
+          p: m.p.slice()
+        });
+      }
+    }
+    this.groupStages = xs;
+  }
+  else {
+    ms = xs;
+  }
+
+  Base.call(this, oldRes.length, ms);
+  this.name = 'TieBreaker';
+  this.grouped = this._opts.grouped;
+  this.strict = this._opts.strict;
+  this.posAry = posAry;
+  this.limit = limit;
+  this.oldRes = oldRes;
+  this.numSections = posAry.length;
+  this.sectionSize = $.flatten(posAry[0]).length;
+  this.betweenPosition = Math.ceil(this.limit / this.numSections);
+
+  // Demote player positions until we are done
+
+  // Demotion must unfortunately happen here, and not in previous tourneys results.
+  // This is because demotion will change depending on what limits we choose.
+  // While this means if we bypass TB we may end up forwarding unfairly (perhaps
+  // more players from one group than another), TB is here to fix it, so use it.
+  var pls = this.players(); // the players that are actually in matches here
+  this.numPlayers = pls.length; // override this.numPlayers set via Base.call(this)
+  var playersGuaranteed = oldRes.filter(function (r) {
+    return pls.indexOf(r.seed) < 0 && r.pos <= limit;
+  }).length;
+  oldRes.forEach(function (r) {
+    if (pls.indexOf(r.seed) >= 0) {
+      r.pos = pls.length + playersGuaranteed;
+    }
+  });
+}
+Base.inherit(TieBreaker);
+
+// ------------------------------------------------------------------
+// Static helpers
+// ------------------------------------------------------------------
+
+// custom invalid that doesn't call inherited versions (because different ctor args)
+TieBreaker.invalid = function (oldRes, posAry, opts, limit) {
+  if (!Array.isArray(oldRes)) {
+    return 'results must be implemented';
+  }
+  if (!Array.isArray(posAry) || !posAry.length) {
+    return 'rawPositions must be implemented properly';
+  }
+  if (!Base.isInteger(limit) || limit < 1 || limit >= oldRes.length) {
+    return 'limit must be an integer in {1, ..., previous.numPlayers}';
+  }
+  if (limit % posAry.length !== 0) {
+    return 'number of sections must divide limit';
+  }
+  oldRes.forEach(function (r) {
+    if (![r.seed, r.for, r.pos].every(Base.isInteger)) {
+      return 'invalid results format - common properties missing';
+    }
+  });
+  var len = posAry[0].length;
+  var s0Len = $.flatten(posAry[0]).length;
+  posAry.forEach(function (seedAry) {
+    seedAry.forEach(function (p) {
+      if (!Base.isInteger(p) || p <= Base.NONE) {
+        return 'invalid rawPositions - all entries must be arrays of integers';
+      }
+    });
+    if (Math.abs(seedAry.length - len) > 1) { // allow diff of 1
+      return 'rawPositions must be ~equally long for every section';
+    }
+    if (Math.abs($.flatten(seedAry).length - s0Len) > 1) { // ditto
+      return 'rawPositions must contain ~equally many players per section';
+    }
+  });
+  return null;
+};
+
+TieBreaker.defaults = function (opts) {
+   // Call defaults from other classes manually + dont modify input
+  var o = Base.defaults(Math.Infinity, opts || {});
+  o.breakForBetween = Boolean(o.breakForBetween);
+  o.grouped = Boolean(o.grouped);
+  o.groupOpts = o.grouped ? GroupStage.defaults(Math.Infinity, o.groupOpts) : {};
+  delete o.groupOpts.groupSize; // all subgroups must be ONE group only
+  delete o.groupOpts.log;
+  // grouped tiebreakers cannot be strict
+  o.strict = Boolean(o.strict) && !o.grouped;
+  return o;
+};
+
+// custom from because TieBreaker has different constructor arguments
+TieBreaker.from = function (inst, numPlayers, opts) {
+  var err = 'Cannot forward from ' + inst.name + ': ';
+  if (!inst.isDone()) {
+    throw new Error(err + 'tournament not done');
+  }
+  var res = inst.results();
+  if (res.length < numPlayers) {
+    throw new Error(err + 'not enough players');
+  }
+  if (!inst.rawPositions) {
+    throw new Error(inst.name + ' does not implement rawPositions');
+  }
+  var posAry = inst.rawPositions(res);
+
+  // NB: no replacing for TieBreaker, everything read from results
+  return new TieBreaker(res, posAry, numPlayers, opts);
+};
+
+TieBreaker.isNecessary = function (inst, numPlayers, opts) {
+  var o = TieBreaker.defaults(opts);
+  var posAry = inst.rawPositions(inst.results());
+  var hasNonEmptyCluster = function (cluster) {
+    return cluster.length > 0;
+  };
+  var clusters = createClusters(posAry, numPlayers, o.breakForBetween);
+  return clusters.some(hasNonEmptyCluster);
+};
+
+// ------------------------------------------------------------------
+// Expected methods
+// ------------------------------------------------------------------
+
+TieBreaker.prototype._verify =  function (match, score) {
+  if (this.strict && $.nub(score).length !== score.length) {
+    return 'scores must unambiguously decide every position in strict mode';
+  }
+  return null;
+};
+
+// can always rescore matches since we don't propagate to between group breakers
+TieBreaker.prototype._safe = $.constant(true);
+
+TieBreaker.prototype._progress = function (match) {
+  if (this.grouped) {
+    var gs = $.firstBy(function (stage) {
+      return stage.tbSection === match.id.s;
+    }, this.groupStages);
+    var oldId = { s: 1, r: match.id.r, m: match.id.m };
+    gs.score(oldId, match.m);
+  }
+};
+
+var compareResults = function (x, y) {
+  var xScore = x.for - (x.against || 0);
+  var yScore = y.for - (y.against || 0);
+  return (y.pts - x.pts) || (yScore - xScore) || (x.seed - y.seed);
+};
+
+var finalCompare = function (x, y) {
+  if (x.pos !== y.pos) {
+    return x.pos - y.pos;
+  }
+  return compareResults(x, y);
+};
+
+var positionAcross = function (xarys) {
+  // always tie between groups like in groupstage - we dont make inferences
+  var posctr = 1;
+  xarys.forEach(function (xplacers) {
+    xplacers.sort(compareResults);
+    xplacers.forEach(function (r) {
+      r.pos = posctr;
+    });
+    posctr += xplacers.length;
+  });
+};
+
+// override results because we need to do it all from scratch
+TieBreaker.prototype.results = function () {
+  var res = this.oldRes.map(function (r) {
+    return $.extend({}, r); // deep copy to avoid modifying oldRes
+  });
+  // NB: we do not care about stats from the matches apart from what it broke
+
+  // gposition based on updated posAry from rawPositions - and create xarys
+  var xarys = $.replicate(this.sectionSize, []);
+  this.rawPositions().forEach(function (seedAry) {
+    seedAry.forEach(function (gxp, x) {
+      gxp.forEach(function (s) {
+        var resEl = Base.resultEntry(res, s);
+        resEl.gpos = x+1;
+        xarys[x].push(resEl);
+      });
+    });
+  });
+
+  if (this.isDone()) {
+    positionAcross(xarys);
+  }
+
+  return res.sort(finalCompare);
+};
+
+TieBreaker.prototype.rawPositions = function () {
+  var findScores = getWithinBreakerScore.bind(this);
+  return this.posAry.map(function (seedAry, i) {
+    var match = findScores(i+1);
+    return match == null ? seedAry : updateSeedAry(seedAry, match);
+  });
+};
+
+TieBreaker.Id = Id;
+module.exports = TieBreaker;
+
+},{"groupstage":"groupstage","interlude":3,"tournament":8}]},{},[])("tiebreaker")
 });
